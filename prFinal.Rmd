@@ -1,0 +1,275 @@
+---
+title: "Práctica Final R"
+author: "Felipe Ortega, Isaac Martín"
+date: '2017'
+output:
+  pdf_document:
+    includes:
+      in_header: header.tex
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  html_document:
+    toc: yes
+    toc_depth: '3'
+mainfont: Roboto Light
+fontsize: 12pt
+---
+
+
+
+## Introducción
+El paquete `nycflights13`, disponible en CRAN, contiene datos sobre 336.776 vuelos
+que despegaron de alguno de los tres aeropuertos que dan servicio a la ciudad
+de Nueva York (EE.UU.) en 2013, procedentes del [Bureau of Transport Statistics](http://www.transtats.bts.gov/DatabaseInfo.asp?DB_ID=120&Link=0):
+
+* Aeropuerto Internacional Libertad de Newark (EWR).
+* Aeropuerto Internacional John. F. Kennedy (JFK).
+* Aeropuerto Internacional de La Guardia (LGA).
+
+El conjunto principal de datos sobre los vuelos está disponible en el `data.frame`
+`flights`, dentro de este paquete. Adicionalmente, su autor (Hadley Wickham) también ha 
+incluido datos sobre los propios aeropuertos, condiciones meteorológicas, etc. Para más
+detalles, ver archivo de descripción del paquete con el comando `?nycflights13`.
+
+## Preparación del ejercicio
+Durante el ejercicio, se utilizarán las bibliotecas `ggplot2` y `dplyr`, ya introducidas
+en clase.
+
+**Nota importante 1: Se recomienda revisar y practicar con los ejemplos del 
+[documento de introducción a
+`dplyr`](https://cran.rstudio.com/web/packages/dplyr/vignettes/introduction.html) 
+antes de realizar este ejercicio**, así como los ejemplos incluidos en el seminario de 
+H. Wickham sobre "Tidy Data", enlazado en la sección referencias del Tema 2 en Aula Virtual.
+
+**Nota importante 2: intente utilizar el operador %>% (*forward pipe*) para el código de resolución
+de todos los ejercicios**.
+
+```{r, message=FALSE}
+# Importamos bibliotecas y datos
+library(ggplot2)
+library(dplyr)
+library(nycflights13)
+```
+
+## Ejercicio 1 (*30 puntos*)
+
+Utiliza las funciones incluidas en el paquete `dplyr`, para responder a las siguientes preguntas:
+
+a) ¿Cuantos vuelos se realizan en total cada mes?
+b) ¿Qué aeropuerto acumula el mayor número de salidas de vuelos en todo el año?
+c) ¿Qué compañía acumula el mayor número de salida de vuelos en los meses de verano (jun-sep.)?
+d) ¿Qué compañia acumula más tiempo de vuelo en todo el año?
+e) ¿Qué compañía registra los mayores retrasos de salida de sus vuelos?
+¿Tienen los retrasos alguna correlación con la duración de los vuelos?
+
+```{r ejercicio-1a, warning=FALSE}
+# a)
+
+flights %>%
+  group_by(month) %>%
+  summarise(count=n())
+
+# Solución: 
+# 1	27004			
+# 2	24951			
+# 3	28834			
+# 4	28330			
+# 5	28796			
+# 6	28243			
+# 7	29425			
+# 8	29327			
+# 9	27574			
+# 10	28889	
+# 11	27268			
+# 12	28135
+```
+```{r ejercicio-1b, warning=FALSE}
+# b)
+
+ airports %>%
+    inner_join(flights, by= c("faa" = "origin")) %>%
+    group_by( name) %>%
+    summarise(count =n()) %>%
+    filter(count==max(count)) 
+
+# Solución: Newark Liberty Intl
+```
+```{r ejercicio-1c, warning=FALSE} 
+# c) 
+ 
+  airlines %>%
+    inner_join(flights, by= "carrier") %>%
+    filter(between(month,6,9)) %>%
+    group_by(name) %>%
+    summarise(count =n()) %>%
+    filter(count==max(count)) 
+  
+  # Solución: United Air Lines Inc.
+```
+```{r ejercicio-1d, warning=FALSE}
+# d)
+  
+  airlines %>%
+    inner_join(flights, by= "carrier") %>%
+    group_by(name) %>%
+    summarise(total_tiempo_vuelo =sum(air_time, na.rm=TRUE)) %>%
+    filter(total_tiempo_vuelo==max(total_tiempo_vuelo)) 
+  
+  # Solución: United Air Lines Inc.
+```
+```{r ejercicio-1e, warning=FALSE}
+# e)  
+  
+  airlines %>%
+    inner_join(flights, by= "carrier") %>%
+    group_by(name) %>%
+    summarise(retrasos=sum(dep_delay, na.rm=TRUE)) %>%
+    filter(retrasos==max(retrasos)) 
+  
+  # Para realizar el cálculo se han tenido en cuenta tanto los retrasos negativos como los positivos. Si quisieramos realizar el ejercicio únicamente con retrasos (valores positivos) deberiamos de incluir el siguiente filtro: filter(dep_delay > 0)
+  # La compañia que presenta un mayor retraso acumulado es: ExpressJet Airlines Inc.
+  
+  ggplot( flights, aes(x=air_time, y=dep_delay,  color=I("red"))) + geom_point(shape=1) + geom_smooth(aes(color=I("blue")), method = "lm") + ggtitle("Relación entre retrasos y duración")
+ 
+```
+
+* A primera vista existe una correlación directa entre duración de vuelo y tiempo de retraso. Cuanto más tiempo de vuelo tiene la compañia mayor tiempo de retraso acumula, y por lo contrario cuando menos tiempo acumula menor tiempo de retraso. Los tiempos de retraso mas grandes se encuentran concentrados en los vuelos de menos de 400 min, aunque también existe más cantidad de vuelos de menos tiempo de vuelo que de grandes tiempos de vuelo. Existen muy pocos vuelos con una duración entre 400/500 min aprox de vuelo. También se han detectado algunos valores anómalos.*
+
+## Ejercicio 2 (*30 puntos*)
+
+La siguiente figura, tomada de la [introducción a dplyr](https://cran.rstudio.com/web/packages/dplyr/vignettes/introduction.html), muestra
+un gráfico en `ggplot2` de la relación entre distancia de los vuelos y retraso experimentado
+para todos los aeropuertos de NYC.
+
+```{r, warning=FALSE}
+by_tailnum <- group_by(flights, tailnum)
+delay <- summarise(by_tailnum,
+  count = n(),
+  dist = mean(distance, na.rm = TRUE),
+  delay = mean(arr_delay, na.rm = TRUE))
+delay <- filter(delay, count > 20, dist < 2000)
+
+# Interestingly, the average delay is only slightly related to the
+# average distance flown by a plane.
+ggplot(delay, aes(dist, delay)) +
+  geom_point(aes(size = count), alpha = 1/2) +
+  labs(x="Distancia (millas)", y="Retraso (mins.)") +
+  geom_smooth(method = 'gam') +
+  scale_size_area() +
+  ggtitle("Relación entre distancia y retrasos en los vuelos") +
+  scale_radius(name="Núm. vuelos")
+```
+
+A la vista del resultado, parece que exista una cierta correlación negativa, aunque
+no muy fuerte, entre ambas variables. Sin embargo, veamos que sucede si desglosamos 
+los datos utilizando otras variables disponibles.
+
+En este ejercicio, se propone **representar el retraso de llegadas
+en función de la distancia recorrida**, utilizando una gráfica como la anterior,
+pero desglosado por meses (es decir, una gráfica como la anterior para cada mes).
+
+La solución óptima debería construir un panel de 12 gráficas, una para cada mes. Cada
+gráfica se debe etiquetar con el nombre abreviado de ese mes, no con el número de mes. Además,
+se debe presentar las gráficas en el orden correcto de los meses del calendario
+(primero el gráfico de enero, luego febrero, etc.), no por orden alfabético de los 
+nombres del mes.
+
+¿Qué conclusiones puedes extraer a la vista de estos gráficos? Intenta ofrecer argumentos
+basados en los resultados obtenidos para elaborar la respuesta.
+
+
+```{r}
+
+month_names = list(
+  "1"="ene",
+  "2"="feb",
+  "3"="mar",
+  "4"="abr",
+  "5"="may",
+  "6"="jun",
+  "7"="jul",
+  "8"="ago",
+  "9"="sep",
+  "10"="oct",
+  "11"="nov",
+  "12"="dic"
+)
+
+monthlabeller = function(variable,value){
+  return(month_names[value])
+}
+
+delay = flights %>%
+  group_by(tailnum, month) %>%
+  summarise(
+    count = n(),
+    dist = mean(distance, na.rm = TRUE),
+    delay = mean(arr_delay, na.rm = TRUE)) %>%
+  filter(count > 20, dist < 2000, !is.na(delay)) %>%
+  arrange(month)
+ 
+
+# Interestingly, the average delay is only slightly related to the
+# average distance flown by a plane.
+ ggplot(delay, aes(dist, delay)) +
+  geom_point(aes(size = count), alpha = 1/2) +
+  labs(x="Distancia (millas)", y="Retraso (mins.)") +
+  geom_smooth(method = 'gam') +
+  ggtitle("Relación entre distancia y retrasos en los vuelos") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_radius(name="Núm. vuelos") +
+  facet_wrap(~month, ncol=3, labeller = monthlabeller) 
+  
+  
+```
+
+*Al hacer la representación ǵrafica se observa que en los meses de verano, especialmente Julio y Agosto, existe una correlación posítiva, no obstante, existen meses, como Enero, en el que la corrrelación es claramente negativa, lo que nos hace concluir que a nivel anual estas correlaciones pueden verse compensadas. *
+
+## Ejercicio 3 (*20 puntos*)
+
+Representar los retrasos de salida de los vuelos que parten  del aeropuerto JFK 
+(código 'JFK'), desglosado por meses (como en el ejercicio anterior). Se mostrarán solo
+los vuelos domésticos, imponiendo como condición de filtrado de datos: `distancia recorrida < 1.000 millas`.
+
+
+```{r}
+
+flights_jfk_1000 = flights %>%
+  #group_by( tailnum, month) %>%
+  group_by(  month) %>%
+  filter(origin=='JFK' & distance < 1000, !is.na(dep_delay) ) 
+  #summarise(count = n(), sum=sum(dep_delay)) %>%
+  #filter(count > 20 )
+
+flights_jfk_1000 %>%
+  filter(dep_delay < 0)
+
+ggplot( flights_jfk_1000, aes(x=dep_delay)) + 
+  geom_density(alpha=0.7,fill="#FF6666") +  
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Relación entre distancia y retrasos en los vuelos") +
+  facet_wrap(~month, ncol=3,  labeller = monthlabeller) 
+
+```
+
+¿Qué conclusiones puedes extraer a la vista de estos gráficos?
+
+*Tanto los retrasos positivos como negativos se acumulan alrededor de 0, por tanto la media debe de rondar el valor 0. En la gráfica se representan valores también mayores al 0 para dar cabida a los outliers existentes. En los meses de Mayo, Junio, Julio y Diciembre, el valor del retraso acumulado es más bajo en relación al resto de meses.*
+
+## Ejercicio 4 (*20 puntos*)
+Utilizando boxplots (`geom_boxplot`), representar gráficamente una comparativa de los 
+retrasos de salida entre las distintas compañías aéreas, en el mes de diciembre, para el 
+aeropuerto de Newark (código 'EWR'). ¿Se observan diferencias notables?
+
+```{r}
+val= flights %>%
+    filter(!is.na(dep_delay)) %>%
+    filter(origin=="EWR" & month==12 )
+
+ggplot(val, aes(x=carrier, y=dep_delay, fill=carrier)) + geom_boxplot() + guides(fill=FALSE) + coord_flip() 
+  
+```
+
+*La compañia EV (ExpressJet Airlines Inc.) es la que mas retrasos tiene. Por tanto, la compañia que mayor retraso acumula en el mes de Diciembre, corresponde con la compañia que mayor retraso acumula durante todo el año. (Ejercicio 1e). Destacan la existencia de 3 outliers de la compañia DL (Delta Air Lines Inc.) y AA (American Airlines Inc.). *
